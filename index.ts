@@ -93,6 +93,31 @@ app.get('/recommendsPlace', (req, res) => {
     })
 })
 
+// POST /api/friends/add
+app.post('/api/friends/add', async (req, res) => {
+    const { userId, friendId } = req.body;
+    console.log("User ID:", userId, "Friend ID:", friendId);
+    if (userId === friendId) {
+        return res.status(400).json({ message: "Cannot add yourself as a friend." });
+    }
+
+    try {
+        const existsQuery = `SELECT * FROM Friends WHERE (user_id1 = ? AND user_id2 = ?) OR (user_id1 = ? AND user_id2 = ?)`;
+        const [exists] = await conn.query(existsQuery, [userId, friendId, friendId, userId]);
+
+        if (exists.length > 0) {
+            return res.status(409).json({ message: "u 2 r already friends" });
+        }
+
+        const insertQuery = `INSERT INTO Friends (user_id1, user_id2) VALUES (?, ?)`;
+        await conn.query(insertQuery, [Math.min(userId, friendId), Math.max(userId, friendId)]);
+        res.status(201).json({ message: "Friend request sent successfully." });
+    } catch (error: any) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
+
+
 // Create an HTTP server that wraps your Express app
 const server = http.createServer(app);
 
