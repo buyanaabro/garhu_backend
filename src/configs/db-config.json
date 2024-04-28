@@ -1,0 +1,8 @@
+{
+    "host": "danielpersonaldb.czo2s8cyqdw9.ap-northeast-1.rds.amazonaws.com",
+    "user": "admin",
+    "password": "?Danirio1115",
+    "database": "garhuUser",
+    "waitForConnections": true,
+    "connectionLimit": 10
+}
