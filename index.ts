@@ -18,7 +18,7 @@ let conn = mysql.createPool({
 })
 
 const app = express();
-const port = 3001;
+const port = 80;
 
 // app.use(bodyParser.text({
 //     type: "*/*"
