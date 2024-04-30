@@ -8,7 +8,7 @@ import { loginRouter, registerRouter, userDataRouter } from "./src/routers/route
 import http from "http"
 import { Server } from "socket.io";
 
-let mysql = require('mysql2')
+let mysql = require('mysql2/promise')
 
 let conn = mysql.createPool({
     host : 'danielpersonaldb.czo2s8cyqdw9.ap-northeast-1.rds.amazonaws.com',
@@ -18,6 +18,7 @@ let conn = mysql.createPool({
 })
 
 const app = express();
+app.use(express.json())
 const port = 80;
 
 // app.use(bodyParser.text({
@@ -28,6 +29,10 @@ app.use(express.text({
     type: "application/json"
 }));
 
+app.use("/auth", loginRouter);
+app.use("/auth", registerRouter);
+app.use("/", userDataRouter);
+
 app.get("/", (req: express.Request, res: express.Response) => {
     return res.send({
         status: 200,
@@ -35,10 +40,6 @@ app.get("/", (req: express.Request, res: express.Response) => {
     });
 });
 
-app.use(express.json())
-app.use("/auth", loginRouter);
-app.use("/auth", registerRouter);
-app.use("/", userDataRouter);
 
 // Code block to create HTTPS Server
 // const httpsServer = https.createServer({
@@ -59,63 +60,65 @@ app.use("/", userDataRouter);
 //     }
 // });
 
-app.get('/stories', (req, res) => {
-    conn.query("SELECT * FROM Stories", (error: any, results: string | any[] | undefined) => {
-        if (error) throw error;
-        return res.send(results)
-    })
-})
-
-app.get('/storyImages/:storyId', (req, res) => {
-    const storyId = req.params.storyId;
-    const query = "SELECT * FROM StoryImages WHERE storyId = ?";
-
-    conn.query(query, [storyId], (error: any, results: any) => {
-        if (error) {
-            console.error("Database Error:", error);
-            return res.status(500).send({ error: "Database Error" });
-        }
-        return res.send(results);
-    });
+app.get('/stories', async (req, res) => {
+    try {
+        const [results] = await conn.query("SELECT * FROM Stories");
+        res.send(results);
+    } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).send({ error: "Database Error" });
+    }
 });
 
-app.get('/recommendsCommunity', (req, res) => {
-    conn.query("SELECT * FROM RecommendsCommunity", (error: any, results: string | any[] | undefined) => {
-        if (error) throw error;
-        return res.send(results)
-    })
-})
+app.get('/storyImages/:storyId', async (req, res) => {
+    const storyId = req.params.storyId;
+    try {
+        const [results] = await conn.query("SELECT * FROM StoryImages WHERE storyId = ?", [storyId]);
+        res.send(results);
+    } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).send({ error: "Database Error" });
+    }
+});
 
-app.get('/recommendsPlace', (req, res) => {
-    conn.query("SELECT * FROM RecommendsPlace", (error: any, results: string | any[] | undefined) => {
-        if (error) throw error;
-        return res.send(results)
-    })
-})
+app.get('/recommendsCommunity', async (req, res) => {
+    try {
+        const [results] = await conn.query("SELECT * FROM RecommendsCommunity");
+        res.send(results);
+    } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).send({ error: "Database Error" });
+    }
+});
 
-// POST /api/friends/add
+app.get('/recommendsPlace', async (req, res) => {
+    try {
+        const [results] = await conn.query("SELECT * FROM RecommendsPlace");
+        res.send(results);
+    } catch (error) {
+        console.error("Database Error:", error);
+        res.status(500).send({ error: "Database Error" });
+    }
+});
+
 app.post('/api/friends/add', async (req, res) => {
     const { userId, friendId } = req.body;
-    console.log("User ID:", userId, "Friend ID:", friendId);
     if (userId === friendId) {
         return res.status(400).json({ message: "Cannot add yourself as a friend." });
     }
-
     try {
-        const existsQuery = `SELECT * FROM Friends WHERE (user_id1 = ? AND user_id2 = ?) OR (user_id1 = ? AND user_id2 = ?)`;
-        const [exists] = await conn.query(existsQuery, [userId, friendId, friendId, userId]);
-
+        const [exists] = await conn.query("SELECT * FROM Friends WHERE (user_id1 = ? AND user_id2 = ?) OR (user_id1 = ? AND user_id2 = ?)", [userId, friendId, friendId, userId]);
         if (exists.length > 0) {
-            return res.status(409).json({ message: "u 2 r already friends" });
+            return res.status(409).json({ message: "You two are already friends" });
         }
-
-        const insertQuery = `INSERT INTO Friends (user_id1, user_id2) VALUES (?, ?)`;
-        await conn.query(insertQuery, [Math.min(userId, friendId), Math.max(userId, friendId)]);
+        await conn.query("INSERT INTO Friends (user_id1, user_id2) VALUES (?, ?)", [Math.min(userId, friendId), Math.max(userId, friendId)]);
         res.status(201).json({ message: "Friend request sent successfully." });
     } catch (error: any) {
+        console.error("Server error:", error);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 });
+
 
 
 // Create an HTTP server that wraps your Express app
