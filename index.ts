@@ -1,45 +1,49 @@
-
 import express from "express";
 // import https from "https";
 // import fs from "fs";
 
 // Router imports
-import { loginRouter, registerRouter, userDataRouter } from "./src/routers/routes";
-import http from "http"
+import {
+  loginRouter,
+  registerRouter,
+  userDataRouter,
+} from "./src/routers/routes";
+import http from "http";
 import { Server } from "socket.io";
 
-let mysql = require('mysql2/promise')
+let mysql = require("mysql2/promise");
 
 let conn = mysql.createPool({
-    host : 'danielpersonaldb.czo2s8cyqdw9.ap-northeast-1.rds.amazonaws.com',
-    user: 'admin',
-    password: '?Danirio1115',
-    database: 'garhuUser'
-})
+  host: "danielpersonaldb.czo2s8cyqdw9.ap-northeast-1.rds.amazonaws.com",
+  user: "admin",
+  password: "?Danirio1115",
+  database: "garhuUser",
+});
 
 const app = express();
-app.use(express.json())
+app.use(express.json());
 const port = 80;
 
 // app.use(bodyParser.text({
 //     type: "*/*"
 // }));
 
-app.use(express.text({
-    type: "application/json"
-}));
+app.use(
+  express.text({
+    type: "application/json",
+  }),
+);
 
 app.use("/auth", loginRouter);
 app.use("/auth", registerRouter);
 app.use("/", userDataRouter);
 
 app.get("/", (req: express.Request, res: express.Response) => {
-    return res.send({
-        status: 200,
-        message: "OK"
-    });
+  return res.send({
+    status: 200,
+    message: "OK",
+  });
 });
-
 
 // Code block to create HTTPS Server
 // const httpsServer = https.createServer({
@@ -60,114 +64,159 @@ app.get("/", (req: express.Request, res: express.Response) => {
 //     }
 // });
 
-app.get('/stories', async (req, res) => {
-    try {
-        const [results] = await conn.query("SELECT * FROM Stories");
-        res.send(results);
-    } catch (error) {
-        console.error("Database Error:", error);
-        res.status(500).send({ error: "Database Error" });
-    }
+app.get("/stories", async (req, res) => {
+  try {
+    const [results] = await conn.query("SELECT * FROM Stories");
+    res.send(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
 });
 
-app.get('/storyImages/:storyId', async (req, res) => {
-    const storyId = req.params.storyId;
-    try {
-        const [results] = await conn.query("SELECT * FROM StoryImages WHERE storyId = ?", [storyId]);
-        res.send(results);
-    } catch (error) {
-        console.error("Database Error:", error);
-        res.status(500).send({ error: "Database Error" });
-    }
+app.get("/storyImages/:storyId", async (req, res) => {
+  const storyId = req.params.storyId;
+  try {
+    const [results] = await conn.query(
+      "SELECT * FROM StoryImages WHERE storyId = ?",
+      [storyId],
+    );
+    res.send(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
 });
 
-app.get('/recommendsCommunity', async (req, res) => {
-    try {
-        const [results] = await conn.query("SELECT * FROM RecommendsCommunity");
-        res.send(results);
-    } catch (error) {
-        console.error("Database Error:", error);
-        res.status(500).send({ error: "Database Error" });
-    }
+app.get("/recommendsCommunity", async (req, res) => {
+  try {
+    const [results] = await conn.query("SELECT * FROM RecommendsCommunity");
+    res.send(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
 });
 
-app.get('/recommendsPlace', async (req, res) => {
-    try {
-        const [results] = await conn.query("SELECT * FROM RecommendsPlace");
-        res.send(results);
-    } catch (error) {
-        console.error("Database Error:", error);
-        res.status(500).send({ error: "Database Error" });
-    }
+app.get("/recommendsPlace", async (req, res) => {
+  try {
+    const [results] = await conn.query("SELECT * FROM RecommendsPlace");
+    res.send(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
 });
 
-app.post('/api/friends/add', async (req, res) => {
-    const { userId, friendId } = req.body;
-    if (userId === friendId) {
-        return res.status(400).json({ message: "Cannot add yourself as a friend." });
+app.post("/api/friends/add", async (req, res) => {
+  const { userId, friendId } = req.body;
+  if (userId === friendId) {
+    return res
+      .status(400)
+      .json({ message: "Cannot add yourself as a friend." });
+  }
+  try {
+    const [exists] = await conn.query(
+      "SELECT * FROM Friends WHERE (user_id1 = ? AND user_id2 = ?) OR (user_id1 = ? AND user_id2 = ?)",
+      [userId, friendId, friendId, userId],
+    );
+    if (exists.length > 0) {
+      return res.status(409).json({ message: "You two are already friends" });
     }
-    try {
-        const [exists] = await conn.query("SELECT * FROM Friends WHERE (user_id1 = ? AND user_id2 = ?) OR (user_id1 = ? AND user_id2 = ?)", [userId, friendId, friendId, userId]);
-        if (exists.length > 0) {
-            return res.status(409).json({ message: "You two are already friends" });
-        }
-        await conn.query("INSERT INTO Friends (user_id1, user_id2) VALUES (?, ?)", [Math.min(userId, friendId), Math.max(userId, friendId)]);
-        res.status(201).json({ message: "Friend request sent successfully." });
-    } catch (error: any) {
-        console.error("Server error:", error);
-        res.status(500).json({ message: "Server error", error: error.message });
-    }
+    await conn.query("INSERT INTO Friends (user_id1, user_id2) VALUES (?, ?)", [
+      Math.min(userId, friendId),
+      Math.max(userId, friendId),
+    ]);
+    res.status(201).json({ message: "Friend request sent successfully." });
+  } catch (error: any) {
+    console.error("Server error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
 });
 
-
+app.get("/api/friends/:userId/chats", async (req, res) => {
+  console.log("Fetching chats for user:", req.params.userId);
+  try {
+    const userId = req.params.userId;
+    const query = `
+            SELECT u.user_id as id, u.username, m.message as lastMessage
+            FROM Friends f
+            JOIN Users u ON u.user_id = CASE WHEN f.user_id1 = ? THEN f.user_id2 ELSE f.user_id1 END
+            LEFT JOIN Messages m ON m.message_id = (
+                SELECT MAX(message_id)
+                FROM Messages
+                WHERE (sender_id = ? AND receiver_id = u.user_id) OR
+                      (sender_id = u.user_id AND receiver_id = ?)
+                ORDER BY timestamp DESC
+                LIMIT 1
+            )
+            WHERE ? IN (f.user_id1, f.user_id2)
+        `;
+    const [results] = await conn.query(query, [userId, userId, userId, userId]);
+    res.json(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
+});
 
 // Create an HTTP server that wraps your Express app
 const server = http.createServer(app);
 
 // Initialize Socket.IO with the HTTP server
 const io = new Server(server);
+let userSockets: any = {};
 
-// Listen for WebSocket connections
 io.on("connection", (socket) => {
-    console.log("A user connected");
+  console.log("A user connected");
 
-    // Handle chat messages
-socket.on("chat message", (data, callback) => {
+  socket.on("register", (userId) => {
+    userSockets[userId] = socket.id;
+    console.log(`User ${userId} registered with socket ID ${socket.id}`);
+  });
+
+  socket.on("chat message", async (data, callback) => {
+    console.log("Received chat message:", data);
     const { message, senderId, receiverId } = data;
-    console.log("Message:", message);
+    const receiverSocketId = userSockets[receiverId];
+    if (!receiverSocketId) {
+      console.error("Receiver not connected");
+      return;
+    }
 
-    const query = "INSERT INTO Messages (sender_id, receiver_id, message) VALUES (?, ?, ?)";
-    conn.query(query, [senderId, receiverId, message], (error: any, results: any) => {
-        if (error) {
-            console.error("Database Error:", error);
-            if (typeof callback === 'function') {
-                callback({ success: false });
-            }
-            return;
-        }
-        // Broadcast the message to all connected clients
-        io.emit("chat message", message);
-        if (typeof callback === 'function') {
-            callback({ success: true });
-        }
+    const query =
+      "INSERT INTO Messages (sender_id, receiver_id, message) VALUES (?, ?, ?)";
+    try {
+      await conn.query(query, [senderId, receiverId, message]);
+      console.log("Emitting message to sender and receiver");
+      socket.emit("chat message", { message, senderId, receiverId }); // Emit back to sender
+      io.to(receiverSocketId).emit("chat message", {
+        message,
+        senderId,
+        receiverId,
+      }); // Emit to receiver
+      if (typeof callback === "function") {
+        callback({ success: true });
+      }
+    } catch (error) {
+      console.error("Database Error:", error);
+      if (typeof callback === "function") {
+        callback({ success: false });
+      }
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("A user disconnected");
+    // Remove the socket from the map when the user disconnects
+    Object.keys(userSockets).forEach((userId) => {
+      if (userSockets[userId] === socket.id) {
+        delete userSockets[userId];
+      }
     });
+  });
 });
 
-    // Handle disconnection
-    socket.on("disconnect", () => {
-        console.log("A user disconnected");
-    });
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Server running on port ${port}`);
 });
-
-
-
-server.listen(port, '0.0.0.0', () => {
- console.log(`Server running on port ${port}`);
-});
-
-// const server = 
-// app.listen(port, () => {
-//  console.log(`Server running on port ${port}`);
-// });
-
-// server.timeout = 10 * 60 * 1000;
