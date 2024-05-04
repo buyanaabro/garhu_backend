@@ -229,25 +229,28 @@ io.on("connection", (socket) => {
   });
 
   socket.on("chat message", async (data, callback) => {
-    console.log("Received chat message:", data);
     const { message, senderId, receiverId } = data;
     const receiverSocketId = userSockets[receiverId];
 
     const query =
       "INSERT INTO Messages (sender_id, receiver_id, message, delivered) VALUES (?, ?, ?, ?)";
     try {
-      const delivered = receiverSocketId ? 1 : 0; // Check if the receiver is connected
-      await conn.query(query, [senderId, receiverId, message, delivered]);
+      await conn.query(query, [
+        senderId,
+        receiverId,
+        message,
+        receiverSocketId ? 1 : 0,
+      ]);
       console.log("Message stored in database");
 
       if (receiverSocketId) {
-        console.log("Emitting message to sender and receiver");
-        socket.emit("chat message", { message, senderId, receiverId }); // Emit back to sender
+        console.log("Emitting message to receiver");
+        // Emit only to the receiver, not back to the sender
         io.to(receiverSocketId).emit("chat message", {
           message,
           senderId,
           receiverId,
-        }); // Emit to receiver
+        });
       }
 
       if (typeof callback === "function") {
