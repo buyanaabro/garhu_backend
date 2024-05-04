@@ -160,6 +160,33 @@ app.get("/api/friends/:userId/chats", async (req, res) => {
   }
 });
 
+app.get("/api/chats/:senderId/:receiverId", async (req, res) => {
+  const { senderId, receiverId } = req.params;
+  try {
+    const query = `
+            SELECT message, sender_id AS senderId
+            FROM Messages
+            WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+            ORDER BY timestamp ASC
+        `;
+    const [messages] = await conn.query(query, [
+      senderId,
+      receiverId,
+      receiverId,
+      senderId,
+    ]);
+    const results = messages.map((msg: any) => ({
+      message: msg.message,
+      senderId: msg.senderId,
+      isFromCurrentUser: msg.senderId === parseInt(senderId),
+    }));
+    res.json(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
+});
+
 // Create an HTTP server that wraps your Express app
 const server = http.createServer(app);
 
@@ -170,31 +197,59 @@ let userSockets: any = {};
 io.on("connection", (socket) => {
   console.log("A user connected");
 
-  socket.on("register", (userId) => {
+  socket.on("register", async (userId) => {
     userSockets[userId] = socket.id;
     console.log(`User ${userId} registered with socket ID ${socket.id}`);
+
+    // Fetch undelivered messages from the database
+    try {
+      const query = `
+                SELECT message, sender_id AS senderId
+                FROM Messages
+                WHERE receiver_id = ? AND delivered = 0
+            `;
+      const [undeliveredMessages] = await conn.query(query, [userId]);
+      undeliveredMessages.forEach((msg: any) => {
+        socket.emit("chat message", {
+          message: msg.message,
+          senderId: msg.senderId,
+          receiverId: userId,
+        });
+        // Update message status to delivered
+        const updateQuery = `
+                    UPDATE Messages
+                    SET delivered = 1
+                    WHERE message_id = ?
+                `;
+        conn.query(updateQuery, [msg.message_id]);
+      });
+    } catch (error) {
+      console.error("Error fetching undelivered messages:", error);
+    }
   });
 
   socket.on("chat message", async (data, callback) => {
     console.log("Received chat message:", data);
     const { message, senderId, receiverId } = data;
     const receiverSocketId = userSockets[receiverId];
-    if (!receiverSocketId) {
-      console.error("Receiver not connected");
-      return;
-    }
 
     const query =
-      "INSERT INTO Messages (sender_id, receiver_id, message) VALUES (?, ?, ?)";
+      "INSERT INTO Messages (sender_id, receiver_id, message, delivered) VALUES (?, ?, ?, ?)";
     try {
-      await conn.query(query, [senderId, receiverId, message]);
-      console.log("Emitting message to sender and receiver");
-      socket.emit("chat message", { message, senderId, receiverId }); // Emit back to sender
-      io.to(receiverSocketId).emit("chat message", {
-        message,
-        senderId,
-        receiverId,
-      }); // Emit to receiver
+      const delivered = receiverSocketId ? 1 : 0; // Check if the receiver is connected
+      await conn.query(query, [senderId, receiverId, message, delivered]);
+      console.log("Message stored in database");
+
+      if (receiverSocketId) {
+        console.log("Emitting message to sender and receiver");
+        socket.emit("chat message", { message, senderId, receiverId }); // Emit back to sender
+        io.to(receiverSocketId).emit("chat message", {
+          message,
+          senderId,
+          receiverId,
+        }); // Emit to receiver
+      }
+
       if (typeof callback === "function") {
         callback({ success: true });
       }
