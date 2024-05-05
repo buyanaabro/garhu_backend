@@ -187,7 +187,17 @@ app.get("/api/chats/:senderId/:receiverId", async (req, res) => {
   }
 });
 
-// Create an HTTP server that wraps your Express app
+app.get("/branches", async (req, res) => {
+  try {
+    const [results] = await conn.query("SELECT * FROM Branches");
+    res.send(results);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
+});
+
+//! Create an HTTP server that wraps your Express app
 const server = http.createServer(app);
 
 // Initialize Socket.IO with the HTTP server
