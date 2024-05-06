@@ -272,6 +272,9 @@ io.on("connection", (socket) => {
         callback({ success: false });
       }
     }
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("chat message", data);
+    }
   });
 
   socket.on("disconnect", () => {
