@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "garhu_backend",
-      script: "./path/to/garhu_backend.js",
+      script: "/Users/buyanaa/Desktop/garhu_backend/index.ts",
       instances: 1,
       autorestart: true,
       watch: false,
@@ -16,7 +16,7 @@ module.exports = {
     },
     {
       name: "index",
-      script: "./path/to/index.ts",
+      script: "Users/buyanaa/Desktop/garhu_backend/index.ts",
       instances: 1,
       autorestart: true,
       watch: false,
