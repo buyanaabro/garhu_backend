@@ -10,6 +10,7 @@ import {
 } from "./src/routers/routes";
 import http from "http";
 import { Server } from "socket.io";
+import multer from "multer";
 
 let mysql = require("mysql2/promise");
 
@@ -197,6 +198,32 @@ app.get("/branches", async (req, res) => {
   }
 });
 
+app.get("/randomUser", async (req, res) => {
+  try {
+    const [user] = await conn.query(
+      "SELECT * FROM Users ORDER BY RAND() LIMIT 1",
+    );
+    res.json(user[0]);
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
+});
+
+app.post("/api/user/update", async (req, res) => {
+  const { userId, username, email } = req.body;
+  try {
+    const [results] = await conn.query(
+      "UPDATE Users SET username = ?, email = ? WHERE user_id = ?",
+      [username, email, userId],
+    );
+    res.json({ message: "Updated user successfully" });
+  } catch (error) {
+    console.error("Database Error:", error);
+    res.status(500).send({ error: "Database Error" });
+  }
+});
+
 //! Create an HTTP server that wraps your Express app
 const server = http.createServer(app);
 
@@ -271,9 +298,6 @@ io.on("connection", (socket) => {
       if (typeof callback === "function") {
         callback({ success: false });
       }
-    }
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("chat message", data);
     }
   });
 

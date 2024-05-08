@@ -3,90 +3,91 @@ import UserModel from "../models/user-model";
 import RegexValid from "../utils/input-regex";
 
 async function authenticateLoginController(req: Request, res: Response) {
-    const bodyData = req.body; // Directly use req.body, which is already a JavaScript object
-    const { email, password } = bodyData;
+  const bodyData = req.body; // Directly use req.body, which is already a JavaScript object
+  const { email, password } = bodyData;
 
-    if (!email) {
-        return res.status(400).send({
-            status_code: 400,
-            message: "Missing field 'email'"
-        });
+  if (!email) {
+    return res.status(400).send({
+      status_code: 400,
+      message: "Missing field 'email'",
+    });
+  }
+
+  if (typeof email !== "string") {
+    return res.status(400).send({
+      status_code: 400,
+      message: "Invalid email format",
+    });
+  }
+
+  const normalizedEmail = email.toLowerCase();
+
+  if (!RegexValid.email(normalizedEmail)) {
+    return res.status(400).send({
+      status_code: 400,
+      message: "Invalid email format",
+    });
+  }
+
+  if (!password) {
+    return res.status(400).send({
+      status_code: 400,
+      message: "Missing field 'password'",
+    });
+  }
+
+  if (typeof password !== "string") {
+    return res.status(400).send({
+      status_code: 400,
+      message: "Invalid password format",
+    });
+  }
+
+  const normalizedPassword = password.toLowerCase();
+
+  if (!RegexValid.password(normalizedPassword)) {
+    return res.status(400).send({
+      status_code: 400,
+      message: "Invalid password format",
+    });
+  }
+
+  try {
+    const userExists = await UserModel.userExists(normalizedEmail);
+
+    if (!userExists) {
+      return res.status(404).send({
+        status_code: 404,
+        message: "User does not exist",
+      });
     }
 
-    if (typeof email !== "string") {
-        return res.status(400).send({
-            status_code: 400,
-            message: "Invalid email format"
-        });
+    const modelRes = await UserModel.authenticateUser(
+      normalizedEmail,
+      normalizedPassword,
+    );
+
+    if (!modelRes.success) {
+      return res.status(404).send({
+        status_code: 404,
+        message: "Invalid credentials",
+      });
     }
 
-    const normalizedEmail = email.toLowerCase();
-
-    if (!RegexValid.email(normalizedEmail)) {
-        return res.status(400).send({
-            status_code: 400,
-            message: "Invalid email format"
-        });
-    }
-
-    if (!password) {
-        return res.status(400).send({
-            status_code: 400,
-            message: "Missing field 'password'"
-        });
-    }
-
-    if (typeof password !== "string") {
-        return res.status(400).send({
-            status_code: 400,
-            message: "Invalid password format"
-        });
-    }
-
-    const normalizedPassword = password.toLowerCase();
-
-    if (!RegexValid.password(normalizedPassword)) {
-        return res.status(400).send({
-            status_code: 400,
-            message: "Invalid password format"
-        });
-    }
-
-    try {
-        const userExists = await UserModel.userExists(normalizedEmail);
-
-        if (!userExists) {
-            return res.status(404).send({
-                status_code: 404,
-                message: "User does not exist"
-            });
-        }
-
-        const modelRes = await UserModel.authenticateUser(normalizedEmail, normalizedPassword);
-
-        if (!modelRes.success) {
-            return res.status(404).send({
-                status_code: 404,
-                message: "Invalid credentials"
-            });
-        }
-
-        return res.status(200).send({
-            status_code: 200,
-            token: modelRes.auth_token
-        });
-
-    } catch (error) {
-        console.error("Server error:", error);
-        return res.status(500).send({
-            status_code: 500,
-            message: "Internal server error"
-        });
-    }
+    return res.status(200).send({
+      status_code: 200,
+      token: modelRes.auth_token,
+    });
+  } catch (error) {
+    console.error("Server error:", error);
+    return res.status(500).send({
+      status_code: 500,
+      message: "Internal server error",
+    });
+  }
 }
 
 export default authenticateLoginController;
-
 
 // // Node module type imports
 // import { Request, response, Response } from "express"
@@ -96,7 +97,6 @@ export default authenticateLoginController;
 
 // // Util imports
 // import RegexValid from "../utils/input-regex";
-
 
 // async function authenticateLoginController(req: Request, res: Response) {
 //     let bodyData: any = JSON.parse(req.body);
