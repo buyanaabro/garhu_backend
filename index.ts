@@ -221,18 +221,24 @@ app.get("/branches", async (req, res) => {
 
 app.get("/api/random-match/:userId", async (req, res) => {
   const userId = parseInt(req.params.userId);
-  const onlineUsers = Object.keys(userSockets)
-    .map((id) => parseInt(id))
-    .filter((id) => id !== userId);
+  const onlineUsersList = Array.from(onlineUsers.keys()).filter(
+    (id) => id !== userId,
+  );
 
-  if (onlineUsers.length > 0) {
+  console.log(`Online users available for matching: ${onlineUsersList}`);
+
+  if (onlineUsersList.length > 0) {
     const randomUserId =
-      onlineUsers[Math.floor(Math.random() * onlineUsers.length)];
+      onlineUsersList[Math.floor(Math.random() * onlineUsersList.length)];
     try {
       const [user] = await conn.query("SELECT * FROM Users WHERE user_id = ?", [
         randomUserId,
       ]);
-      res.json(user[0]);
+      if (user.length > 0) {
+        res.json(user[0]);
+      } else {
+        res.status(404).send({ message: "Matched user not found." });
+      }
     } catch (error) {
       console.error("Database Error:", error);
       res.status(500).send({ error: "Database Error" });
