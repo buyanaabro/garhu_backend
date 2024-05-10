@@ -10,7 +10,6 @@ import {
 } from "./src/routers/routes";
 import http from "http";
 import { Server } from "socket.io";
-import multer from "multer";
 
 let mysql = require("mysql2/promise");
 
@@ -24,6 +23,13 @@ let conn = mysql.createPool({
 const app = express();
 app.use(express.json());
 const port = 80;
+
+// const bodyParser = require("body-parser");
+
+// app.use(bodyParser.json({ limit: "50mb" }));
+// app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // app.use(bodyParser.text({
 //     type: "*/*"
@@ -67,7 +73,12 @@ app.get("/", (req: express.Request, res: express.Response) => {
 
 app.get("/stories", async (req, res) => {
   try {
-    const [results] = await conn.query("SELECT * FROM Stories");
+    const [results] = await conn.query(`
+      SELECT s.storyId, s.user_id, s.imageUrl as videoUrl, s.caption, s.postedAt, b.ProfilePictureUrl as profileImageUrl, b.userName
+      FROM Stories s
+      JOIN BusinessUser b ON s.user_id = b.userId
+      ORDER BY s.user_id
+    `);
     res.send(results);
   } catch (error) {
     console.error("Database Error:", error);
@@ -75,14 +86,24 @@ app.get("/stories", async (req, res) => {
   }
 });
 
-app.get("/storyImages/:storyId", async (req, res) => {
+app.get("/stories/:storyId", async (req, res) => {
   const storyId = req.params.storyId;
   try {
     const [results] = await conn.query(
-      "SELECT * FROM StoryImages WHERE storyId = ?",
+      `
+      SELECT s.storyId, s.user_id, s.imageUrl as videoUrl, s.caption, s.postedAt, b.ProfilePictureUrl as profileImageUrl
+      FROM Stories s
+      JOIN BusinessUser b ON s.user_id = b.userId
+      WHERE s.storyId = ?
+    `,
       [storyId],
     );
-    res.send(results);
+
+    if (results.length > 0) {
+      res.send(results[0]); // Send the first (and should be only) result
+    } else {
+      res.status(404).send({ error: "Story not found" });
+    }
   } catch (error) {
     console.error("Database Error:", error);
     res.status(500).send({ error: "Database Error" });
@@ -198,41 +219,80 @@ app.get("/branches", async (req, res) => {
   }
 });
 
-app.get("/randomUser", async (req, res) => {
-  try {
-    const [user] = await conn.query(
-      "SELECT * FROM Users ORDER BY RAND() LIMIT 1",
-    );
-    res.json(user[0]);
-  } catch (error) {
-    console.error("Database Error:", error);
-    res.status(500).send({ error: "Database Error" });
+app.get("/api/random-match/:userId", async (req, res) => {
+  const userId = parseInt(req.params.userId);
+  const onlineUsers = Object.keys(userSockets)
+    .map((id) => parseInt(id))
+    .filter((id) => id !== userId);
+
+  if (onlineUsers.length > 0) {
+    const randomUserId =
+      onlineUsers[Math.floor(Math.random() * onlineUsers.length)];
+    try {
+      const [user] = await conn.query("SELECT * FROM Users WHERE user_id = ?", [
+        randomUserId,
+      ]);
+      res.json(user[0]);
+    } catch (error) {
+      console.error("Database Error:", error);
+      res.status(500).send({ error: "Database Error" });
+    }
+  } else {
+    res
+      .status(404)
+      .send({ message: "No online users available for matching." });
   }
 });
 
 app.post("/api/user/update", async (req, res) => {
-  const { userId, username, email } = req.body;
+  const { userId, username, email, profilePictureBase64 } = req.body;
+  const imageBuffer = Buffer.from(profilePictureBase64, "base64");
+  const query =
+    "UPDATE Users SET username = ?, email = ?, profilePictureUrl = ? WHERE user_id = ?";
   try {
-    const [results] = await conn.query(
-      "UPDATE Users SET username = ?, email = ? WHERE user_id = ?",
-      [username, email, userId],
-    );
-    res.json({ message: "Updated user successfully" });
+    await conn.query(query, [username, email, imageBuffer, userId]);
+    res.json({ message: "Profile updated successfully." });
   } catch (error) {
-    console.error("Database Error:", error);
-    res.status(500).send({ error: "Database Error" });
+    console.error(error);
+    res.status(500).json({ error: "Failed to update user data" });
   }
 });
 
 //! Create an HTTP server that wraps your Express app
+
 const server = http.createServer(app);
 
 // Initialize Socket.IO with the HTTP server
 const io = new Server(server);
 let userSockets: any = {};
+let onlineUsers = new Map();
 
 io.on("connection", (socket) => {
   console.log("A user connected");
+
+  socket.on("new-user-add", (userId) => {
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, socket.id);
+      console.log(`User ${userId} connected with socket ID ${socket.id}`);
+    }
+    // Optionally, broadcast the online status to other users
+    io.emit("user-online", userId);
+  });
+
+  socket.on("disconnect", () => {
+    onlineUsers.forEach((value, key) => {
+      if (value === socket.id) {
+        onlineUsers.delete(key);
+        console.log(`User ${key} disconnected`);
+        // Optionally, broadcast the offline status to other users
+        io.emit("user-offline", key);
+      }
+    });
+  });
+
+  socket.on("ping-check", () => {
+    socket.emit("pong-check");
+  });
 
   socket.on("register", async (userId) => {
     userSockets[userId] = socket.id;
