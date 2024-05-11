@@ -182,6 +182,8 @@ app.get("/api/friends/:userId/chats", async (req, res) => {
   }
 });
 
+//
+
 app.get("/api/chats/:senderId/:receiverId", async (req, res) => {
   const { senderId, receiverId } = req.params;
   try {
