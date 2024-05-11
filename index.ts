@@ -221,15 +221,15 @@ app.get("/branches", async (req, res) => {
 
 app.get("/api/random-match/:userId", async (req, res) => {
   const userId = parseInt(req.params.userId);
-  const onlineUsersList = Array.from(onlineUsers.keys()).filter(
-    (id) => id !== userId,
-  );
+  const onlineUsersList = Array.from(onlineUsers.keys())
+    .map(Number)
+    .filter((id) => id !== userId);
 
-  console.log(`Online users available for matching: ${onlineUsersList}`);
+  console.log(`Eligible users for matching with ${userId}: ${onlineUsersList}`);
 
   if (onlineUsersList.length > 0) {
-    const randomUserId =
-      onlineUsersList[Math.floor(Math.random() * onlineUsersList.length)];
+    const randomIndex = Math.floor(Math.random() * onlineUsersList.length);
+    const randomUserId = onlineUsersList[randomIndex];
     try {
       const [user] = await conn.query("SELECT * FROM Users WHERE user_id = ?", [
         randomUserId,
@@ -277,24 +277,20 @@ io.on("connection", (socket) => {
   console.log("A user connected");
 
   socket.on("new-user-add", (userId) => {
-    if (!onlineUsers.has(userId)) {
-      onlineUsers.set(userId, socket.id);
-      console.log(`User ${userId} connected with socket ID ${socket.id}`);
-    }
-    // Optionally, broadcast the online status to other users
-    io.emit("user-online", userId);
+    onlineUsers.set(userId, socket.id);
+    console.log(`Online Users: ${Array.from(onlineUsers.keys())}`);
   });
 
-  socket.on("disconnect", () => {
-    onlineUsers.forEach((value, key) => {
-      if (value === socket.id) {
-        onlineUsers.delete(key);
-        console.log(`User ${key} disconnected`);
-        // Optionally, broadcast the offline status to other users
-        io.emit("user-offline", key);
-      }
-    });
-  });
+  // socket.on("disconnect", () => {
+  //   onlineUsers.forEach((value, key) => {
+  //     if (value === socket.id) {
+  //       onlineUsers.delete(key);
+  //       console.log(`User ${key} disconnected`);
+  //       // Optionally, broadcast the offline status to other users
+  //       io.emit("user-offline", key);
+  //     }
+  //   });
+  // });
 
   socket.on("ping-check", () => {
     socket.emit("pong-check");
@@ -369,6 +365,12 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("A user disconnected");
+    onlineUsers.delete(socket.userId);
+    console.log(
+      `User ${socket.userId} disconnected. Remaining users: ${Array.from(
+        onlineUsers.keys(),
+      )}`,
+    );
     // Remove the socket from the map when the user disconnects
     Object.keys(userSockets).forEach((userId) => {
       if (userSockets[userId] === socket.id) {
